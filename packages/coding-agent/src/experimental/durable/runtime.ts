@@ -26,7 +26,15 @@ import {
 	findInitialAgentModel,
 } from "./harness-setup.ts";
 import { selectSession } from "./sessions.ts";
-import { Subagent } from "./subagent.ts";
+import {
+	createSubagent,
+	DEFAULT_SUBAGENT_LIMIT,
+	formatSubagentLimit,
+	formatSubagentSlots,
+	parseSubagentLimit,
+	SubagentLimiter,
+	type SubagentSlots,
+} from "./subagent.ts";
 
 const context = BACKGROUND_CONTEXT;
 
@@ -59,6 +67,8 @@ export interface DurableView {
 	readonly notices: readonly Notice[];
 	/** The live task graph while the task panel is open. */
 	readonly tasks?: TaskGraph;
+	/** Subagents running and queued, and the cap. */
+	readonly subagents: SubagentSlots;
 }
 
 export interface DurableViewSource {
@@ -75,6 +85,11 @@ export interface DurableController {
 	cycleThinking(): Promise<void>;
 	setModel(model: ModelRef): Promise<void>;
 	toggleTasks(): Promise<void>;
+	/**
+	 * `/subagents [N|off]`: how many subagents run at once from now on, as `parseSubagentLimit()` reads it; empty reports
+	 * the current cap. Running subagents are never stopped.
+	 */
+	setSubagentLimit(value: string): Promise<void>;
 	/** Show and talk to another conversation. */
 	switchConversation(id: ConversationId): Promise<void>;
 }
@@ -82,6 +97,8 @@ export interface DurableController {
 export interface OpenDurableOptions {
 	readonly cwd?: string;
 	readonly continueSession?: boolean;
+	/** Subagents that run at once; default `DEFAULT_SUBAGENT_LIMIT`, `Infinity` for no cap. */
+	readonly subagentLimit?: number;
 }
 
 export interface OpenDurableResult {
@@ -138,7 +155,8 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
 		configureHarnessHttp(settingsManager);
 		const settings = createHarnessSettings(settingsManager);
 		const registry = createCodingRegistry(settingsManager, location.cwd);
-		registry.install(Subagent);
+		const limiter = new SubagentLimiter(options.subagentLimit ?? DEFAULT_SUBAGENT_LIMIT);
+		registry.install(createSubagent(limiter));
 
 		const pendingReports: unknown[] = [];
 		let report: (error: unknown) => void = (error) => pendingReports.push(error);
@@ -186,6 +204,7 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
 			conversations: summaries,
 			models: models(),
 			notices: [],
+			subagents: limiter.snapshot(),
 		};
 		const listeners = new Set<() => void>();
 		let notifying = false;
@@ -206,7 +225,15 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
 		const fail = (error: unknown): void => notice("error", error instanceof Error ? error.message : String(error));
 		report = (error) => notice("warning", error instanceof Error ? error.message : String(error));
 		for (const error of pendingReports) report(error);
-		conversation.start(async (value) => update({ conversation: value }));
+		// Watch listeners return a promise; rendering is synchronous, so each resolves at once.
+		const showConversation = (value: ConversationView): Promise<void> => {
+			update({ conversation: value });
+			return Promise.resolve();
+		};
+		conversation.start(showConversation);
+		const unsubscribeSubagents = limiter.subscribe(() => {
+			update({ subagents: limiter.snapshot() });
+		});
 		// Subagents appear as their conversations are created. A commit listener only records; it calls no Session API.
 		const unsubscribeCommits = harness.subscribeCommits((publication) => {
 			let conversations = state.conversations;
@@ -311,7 +338,17 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
 					const graph = await opened.watchTaskGraph(context);
 					tasks = graph;
 					update({ tasks: graph.value });
-					graph.start(async (value) => update({ tasks: value }));
+					graph.start((value) => {
+						update({ tasks: value });
+						return Promise.resolve();
+					});
+				}),
+			setSubagentLimit: (value) =>
+				command(() => {
+					limiter.setLimit(parseSubagentLimit(value, limiter.snapshot().limit));
+					const slots = limiter.snapshot();
+					notice("info", `Subagent limit: ${formatSubagentLimit(slots.limit)} (${formatSubagentSlots(slots)}).`);
+					return Promise.resolve();
 				}),
 			switchConversation: (id) =>
 				command(async () => {
@@ -322,7 +359,7 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
 					current = next;
 					conversation = nextWatch;
 					update({ conversation: nextWatch.value });
-					nextWatch.start(async (value) => update({ conversation: value }));
+					nextWatch.start(showConversation);
 				}),
 		};
 
@@ -351,6 +388,7 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
 			close() {
 				closing ??= (async () => {
 					unsubscribeCommits();
+					unsubscribeSubagents();
 					void conversation.stop();
 					closeTasks();
 					try {

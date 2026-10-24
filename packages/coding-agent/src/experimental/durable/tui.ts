@@ -45,6 +45,7 @@ import { UserMessageComponent } from "../../modes/interactive/components/user-me
 import { getEditorTheme, getMarkdownTheme, initTheme, theme } from "../../modes/interactive/theme/theme.ts";
 import { InteractiveThemeController } from "../../modes/interactive/theme/theme-controller.ts";
 import { agentOf, type DurableController, type DurableView, type DurableViewSource } from "./runtime.ts";
+import { formatSubagentSlots } from "./subagent.ts";
 
 const SELECT_THEME: SelectListTheme = {
 	selectedPrefix: (text) => theme.fg("accent", text),
@@ -288,9 +289,13 @@ class DurableTui {
 			component.setArgsComplete();
 			if (slot.status !== "running") continue;
 			component.markExecutionStarted();
-			const child = (slot.details as { conversationId?: number } | undefined)?.conversationId;
+			const details = slot.details as { conversationId?: number; queued?: boolean } | undefined;
+			const child = details?.conversationId;
 			if (slot.output === undefined && child !== undefined) {
 				const text = `Subagent ${child} is working. /agents switches to it.`;
+				component.updateResult({ content: [{ type: "text", text }], details: slot.details, isError: false }, true);
+			} else if (slot.output === undefined && details?.queued === true) {
+				const text = `Subagent queued (${formatSubagentSlots(view.subagents)}). /subagents N raises the limit.`;
 				component.updateResult({ content: [{ type: "text", text }], details: slot.details, isError: false }, true);
 			} else if (slot.output !== undefined) {
 				component.updateResult(
@@ -395,10 +400,11 @@ class DurableTui {
 		const model = agent.model === undefined ? "no model" : `${agent.model.provider}/${agent.model.modelId}`;
 		const shown = view.conversations.find((candidate) => candidate.id === view.conversation.conversation.id);
 		const label = shown?.label ?? `conversation ${view.conversation.conversation.id}`;
+		const subagents = `subagents ${formatSubagentSlots(view.subagents)}`;
 		this.#footerHints.setText(
 			`${theme.fg(label === "main" ? "dim" : "accent", label)}${theme.fg(
 				"dim",
-				` · ${model} · thinking:${agent.thinkingLevel ?? "off"} (${keyText("app.thinking.cycle")}) · ${keyText("app.model.select")} or /model · /agents · /compact · /tasks · ${keyText("app.message.followUp")} follow-up · ${keyText("app.clear")} exit`,
+				` · ${model} · thinking:${agent.thinkingLevel ?? "off"} (${keyText("app.thinking.cycle")}) · ${keyText("app.model.select")} or /model · /agents · /compact · /tasks · ${subagents} (/subagents) · ${keyText("app.message.followUp")} follow-up · ${keyText("app.clear")} exit`,
 			)}`,
 		);
 	}
@@ -630,6 +636,9 @@ export async function runDurableTui(
 			if (trimmed === "/model") return selectModel();
 			if (trimmed === "/tasks") return void controller.toggleTasks();
 			if (trimmed === "/agents") return selectConversation();
+			if (trimmed === "/subagents" || trimmed.startsWith("/subagents ")) {
+				return void controller.setSubagentLimit(trimmed.slice("/subagents".length));
+			}
 			if (trimmed === "/compact" || trimmed.startsWith("/compact ")) {
 				const instructions = trimmed.slice("/compact".length).trim();
 				return void controller.compact(instructions || undefined);
