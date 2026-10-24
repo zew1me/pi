@@ -13,13 +13,22 @@ export default mergeConfig(
 			unstubEnvs: true,
 			reporters: process.env.GITHUB_ACTIONS ? ["dot", "github-actions"] : ["dot"],
 			silent: "passed-only",
+			// The fork's own logic; the rest of the app is checked by type checks and a launch.
+			coverage: {
+				provider: "v8",
+				include: ["src/experimental/durable/subagent.ts"],
+				reporter: ["text"],
+				thresholds: { lines: 95, functions: 95, branches: 90, statements: 95 },
+			},
 			server: {
 				deps: {
 					external: [/@silvia-odwyer\/photon-node/],
 				},
 			},
 		},
+		// Workspace packages such as pi-durable and chord resolve to their sources.
 		resolve: {
+			conditions: ["source"],
 			alias: [
 				{ find: /^@earendil-works\/pi-ai$/, replacement: workspaceSourcePaths.aiIndex },
 				{ find: /^@earendil-works\/pi-agent-core$/, replacement: workspaceSourcePaths.agentIndex },
@@ -29,5 +38,6 @@ export default mergeConfig(
 				{ find: /^@mariozechner\/pi-tui$/, replacement: workspaceSourcePaths.tuiIndex },
 			],
 		},
+		ssr: { resolve: { conditions: ["source"] } },
 	}),
 );

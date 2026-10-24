@@ -20,14 +20,17 @@ credentials are shared.
 - **Durability:** every streamed partial, tool output, queue, and turn is committed. Kill the process in the middle
   of a tool call and start it again with `--continue`: the interrupted call gets an interrupted result and the turn
   finishes. Nothing in the TUI handles recovery; it only renders the conversation view.
-- **One view:** the TUI renders `Conversation.viewState()`, the structural mount of the transcript and the built-in
+- **One view:** the TUI renders `Conversation.watch()`, the structural view of the transcript and the built-in
   documents (`pi.live`, `pi.inbox`, `pi.agent`, `pi.usage`). Streaming, tool progress, the queue, retries,
   compaction status, the model, and usage all come from it.
 - **Subagents:** the `subagent` tool runs a task in a child conversation owned by the call. `/agents` switches the
   view to any conversation, also while the subagent works, and the editor then talks to it: steer it while busy, or
   keep chatting after the call returned. Esc aborts the shown conversation; aborting the main turn aborts its
   subagents.
-- **Task graph:** a live panel of `Harness.taskGraph()`, shown by default and toggled with `/tasks`: every live task, what it waits on, and the
+- **Subagent cap:** with `PI_SUBAGENT_MAX_CONCURRENCY=N`, at most N subagents run at once (default: no cap, as
+  upstream); the rest wait in arrival order, shown as queued. `/subagents N` changes the cap while running. Children cannot
+  delegate, so a child never waits for a slot its parent holds.
+- **Task graph:** a live panel of `Harness.watchTaskGraph()`, shown by default and toggled with `/tasks`: every live task, what it waits on, and the
   conversations it owns.
 
 ## Commands
@@ -41,6 +44,8 @@ credentials are shared.
   `compaction.keepRecentTokens`
 - `/agents`: switch conversations
 - `/tasks`: hide or show the task panel
+- `/subagents [N|off]`: show or set how many subagents run at once; waiting calls start at once when it rises,
+  running ones are never stopped when it falls
 - tools expand key (Ctrl+O): expand tool output and compaction summaries
 - clear key (Ctrl+C) or Ctrl+D: exit at once, unlike pi's clear-first Ctrl+C; work in flight resumes with
   `--continue`
@@ -53,7 +58,7 @@ credentials are shared.
 | `sessions.ts` | session directories and the lock |
 | `runtime.ts` | Harness, registry, settings, environments; the plain `DurableView` and `DurableController` |
 | `prompt.ts` | pi's system prompt sections (tools, rules, docs, AGENTS.md, skills, cwd) as one extension |
-| `subagent.ts` | the foreground subagent tool |
+| `subagent.ts` | the foreground subagent tool and `SubagentLimiter`, its concurrency cap |
 | `tui.ts` | rendering with pi's interactive components |
 
 Compaction thresholds, retry policy, queue modes, and request timeouts come from pi's `settings.json` as loaded at
