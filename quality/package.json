@@ -6,7 +6,7 @@
 	"description": "Quality gate for this fork's own changes: the durable app and its subagent limiter",
 	"scripts": {
 		"lint:eslint": "cd .. && eslint -c quality/eslint.config.mjs --max-warnings 0 packages/coding-agent/src/experimental/durable/subagent.ts packages/coding-agent/src/experimental/durable/main.ts packages/coding-agent/test/durable-subagent-limiter.test.ts",
-		"lint:markdown": "markdownlint-cli2 --config .markdownlint-cli2.jsonc ../packages/coding-agent/src/experimental/durable/README.md",
+		"lint:markdown": "markdownlint-cli2 --config .markdownlint-cli2.jsonc ../README.md ../packages/coding-agent/src/experimental/durable/README.md",
 		"typecheck": "node typecheck.mjs",
 		"secrets": "secretlint --secretlintrc .secretlintrc.json \"../README.md\" \"../packages/coding-agent/src/experimental/durable/**/*\" \"../packages/coding-agent/test/durable-*.ts\" \"../quality/*.{json,jsonc,mjs}\" \"../.github/**/*\"",
 		"check": "npm run lint:eslint && npm run lint:markdown && npm run typecheck && npm run secrets"
