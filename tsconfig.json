@@ -46,6 +46,6 @@
 			"@earendil-works/pi-tui/*": ["./packages/tui/src/*"]
 		}
 	},
-	"include": ["packages/*/src/**/*", "packages/*/test/**/*", "packages/durable/test-workers/**/*", "packages/coding-agent/examples/**/*", "packages/agent/examples/**/*"],
-	"exclude": ["**/dist/**", "packages/coding-agent/examples/extensions/gondolin/**"]
+	"include": ["packages/*/src/**/*", "packages/*/test/**/*", "packages/durable/test-workers/**/*", "packages/agent/examples/**/*"],
+	"exclude": ["**/dist/**"]
 }
