@@ -1,0 +1,41 @@
+name: check
+
+on:
+  push:
+    branches: [main, durable-subagent-cap]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            quality/package-lock.json
+      # As upstream's CI: fd and ripgrep back the find and grep tools; the rest builds native test dependencies.
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev fd-find ripgrep
+          sudo ln -s "$(which fdfind)" /usr/local/bin/fd
+      - name: Install dependencies (no lifecycle scripts)
+        run: |
+          npm ci --ignore-scripts
+          npm --prefix quality ci --ignore-scripts
+      - name: Hydrate generated model data
+        run: npm run hydrate:model-data
+      # Some package tests load other packages' dist output, as upstream's do.
+      - name: Build
+        run: npm run build
+      - name: Check
+        run: npm run check
+      - name: Test (isolated home, no API keys)
+        run: ./test.sh
