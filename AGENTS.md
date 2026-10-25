@@ -27,6 +27,22 @@
 - Never hardcode key checks (e.g. `matchesKey(keyData, "ctrl+x")`). Add defaults to `DEFAULT_EDITOR_KEYBINDINGS` or `DEFAULT_APP_KEYBINDINGS` so they stay configurable.
 - Never modify `packages/ai/src/models.generated.ts` directly; update `packages/ai/scripts/generate-models.ts` instead, then regenerate. Including the resulting `models.generated.ts` diff is always OK, even if regeneration includes unrelated upstream model metadata changes. The generated model data in `packages/ai/src/providers/data/` is gitignored: never stage it, and don't look for it in git history.
 
+## Initial Setup
+
+Run from the repo root after a fresh clone, or when `node_modules` is missing:
+
+```bash
+npm install --ignore-scripts
+npm run hydrate:model-data
+```
+
+- `--ignore-scripts` skips lifecycle scripts (npm scripts that run automatically during install, such as `prepare`). See Dependency and Install Security.
+- `hydrate:model-data` fetches public model catalogs and writes `packages/ai/src/providers/data/` (gitignored). Without it, `tsc` reports errors in `packages/ai/src/providers/*.models.ts`. It needs network access.
+- Git hooks are not installed by this flow, because `prepare` installs husky. The pre-commit hook blocks lockfile commits and runs `npm run check`. Run `npm run prepare` only if you want it active; it is a lifecycle script.
+- `npm install` may rewrite `package-lock.json` even with no dependency changes. npm 10.9.4, for example, removed `libc` entries from optional native packages. If `git diff package-lock.json` shows only that kind of change, restore it with `git checkout -- package-lock.json`. Do not restore changes another session made.
+- Verify with `node_modules/.bin/tsc --noEmit`. It should exit 0 with no output. It is the typecheck step of `npm run check`, without the write steps.
+- Cloud sessions: add the same commands to the environment setup script, after a `cd` into the repo.
+
 ## Commands
 
 - After code changes (not docs): `npm run check` (full output, no tail). Fix all errors, warnings, and infos before committing. Does not run tests.
