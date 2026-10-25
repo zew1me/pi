@@ -27,6 +27,10 @@
 		"includes": [
 			"packages/*/src/**/*.ts",
 			"packages/*/test/**/*.ts",
+			"packages/coding-agent/examples/**/*.ts",
+			"packages/agent/examples/**/*.ts",
+			"packages/evals/evals/**/*.ts",
+			"packages/evals/docker/**/*.ts",
 			"!**/node_modules/**/*",
 			"!**/test-sessions.ts",
 			"!**/models.generated.ts",
