@@ -1,206 +1,101 @@
-<p align="center">
-  <a href="https://pi.dev">
-    <img alt="pi logo" src="https://pi.dev/logo-auto.svg" width="128">
-  </a>
-</p>
-<p align="center">
-  <a href="https://discord.com/invite/3cU7Bz4UPx"><img alt="Discord" src="https://img.shields.io/badge/discord-community-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
-  <a href="https://www.npmjs.com/package/@earendil-works/pi-coding-agent"><img alt="npm" src="https://img.shields.io/npm/v/@earendil-works/pi-coding-agent?style=flat-square" /></a>
-</p>
+# pi durable fork
 
-> New issues and PRs from new contributors are auto-closed by default. Maintainers review auto-closed issues daily. See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-# Pi
-
-Pi is a minimal, extensible agent harness that you can make your own.
-
-Adapt Pi to your workflows, not the other way around. Customize Pi with [extensions](packages/coding-agent/docs/extensions.md), [skills](packages/coding-agent/docs/skills.md), [prompt templates](packages/coding-agent/docs/prompt-templates.md), and [themes](packages/coding-agent/docs/themes.md). Bundle them as [Pi packages](packages/coding-agent/docs/packages.md) and share via npm or git.
-
-Pi ships with powerful defaults but skips features like sub-agents and plan mode. Ask Pi to build what you want, or install a package that does it your way.
-
-Use Pi [interactively](packages/coding-agent/docs/usage.md), automate it in [print or JSON mode](packages/coding-agent/docs/cli.md), control it over [RPC](packages/coding-agent/docs/rpc.md), or build apps with the [Pi TypeScript SDK](packages/coding-agent/docs/sdk.md). See [OpenClaw](https://github.com/OpenClaw/OpenClaw) for a real-world integration.
-
-## Getting started
-
-Install the command-line interface:
+A trimmed fork of [earendil-works/pi](https://github.com/earendil-works/pi). It keeps one thing working: the experimental durable coding agent. It adds a cap on how many subagents run at once.
 
 ```bash
-curl -fsSL https://pi.dev/install.sh | sh
+npm ci --ignore-scripts
+npm run hydrate:model-data
+node --import ./packages/coding-agent/src/experimental/source-resolver.ts packages/coding-agent/src/experimental/durable/main.ts
 ```
 
-On Windows:
+`npm start` runs the same command; pass arguments after `--` (`npm start -- --continue`). Use `--continue` (or `-c`) to reopen the newest session for the current directory. Log in with pi itself; credentials are shared through `~/.pi/agent`.
 
-```shell
-powershell -c "irm https://pi.dev/install.ps1 | iex"
-```
+## Why this fork exists
 
-The installer pins all dependencies and updates Pi with `pi update`. Alternatively, install directly with npm, which does not pin transitive dependencies:
+**The app was removed upstream.** Upstream commit `7472cda0d` removed the experimental durable app (`packages/coding-agent/src/experimental/durable/`) together with the server/client stack. The only way to run it was an older checkout at `v1.0.0`, pinned to an older `pi-durable` API. This fork restores the app from `7472cda0d^` on top of current upstream. It ports the app to the API changes made since then:
+
+- `Conversation.watch()` and `Harness.watchTaskGraph()` replace `viewState()` and `taskGraph()`.
+- Tool results return `output` instead of `content`.
+
+**Subagent fan-out had no limit.** The app's `subagent` tool runs each delegated task in its own child conversation. Tools in one model answer run in parallel. So an answer with 12 `subagent` calls started 12 conversations at once, each streaming its own model requests. That causes rate limits, cost spikes, and a task panel nobody can follow. This fork caps the number of subagents running at once; the rest wait in arrival order.
+
+**Everything outside the app's dependency tree is removed.** The fork keeps the nine packages the launch command imports: `ai`, `agent`, `chord`, `codemode`, `coding-agent`, `durable`, `mcp`, `telemetry`, `tui`.
+
+- Each keeps its source and its full upstream test suite. The eight library packages match upstream file for file.
+- coding-agent keeps its docs (the system prompt points the model at them) and the example extensions and scripts its tests load.
+
+The `env` and `evals` packages, coding-agent's other examples, release and publish tooling, Nix files, and upstream CI are gone.
+
+## Subagent concurrency cap
+
+| How | Example | Scope | Takes effect |
+| --- | --- | --- | --- |
+| Environment, at startup | `PI_SUBAGENT_MAX_CONCURRENCY=2` | this process | at start |
+| TUI command | `/subagents 6`, `/subagents off`, `/subagents` (show) | this process | at once for waiting calls |
+
+- **Default and "no cap".** The default is no cap, as upstream: every subagent call starts at once. `off`, `none`, `unlimited`, or `0` also mean no cap.
+- **Precedence.** The environment variable sets the starting value; `/subagents` replaces it until the process exits. The value is not stored in the session, so `--continue` starts from the environment again.
+- **Prior art.** The variable name and its meaning follow the community pi-subagent extensions ([oira666/pi-subagent](https://pi.dev/packages/oira666_pi-subagent), [smoosex/pi-subagent](https://cdn.jsdelivr.net/gh/smoosex/pi-subagent@main/README.md)), and upstream PR [#2487](https://github.com/earendil-works/pi/pull/2487) proposed a similar `maxParallelTools` semaphore. All three target the classic pi agent loop and extension API, not pi-durable, so none of their code applies here. This limiter is built on pi-durable's own model: a replay-safe registry tool, child conversations owned by the call's task, and calls that queue again when a restarted Harness replays them.
+
+How it behaves:
+
+- **Order.** Waiting calls start first-come, first-served. A queued call shows "Subagent queued" in its tool card, and the footer shows `subagents 2/4 running, 3 queued`.
+- **Raising and lowering.** Raising the cap starts waiting calls at once. Lowering it never stops a running subagent; new ones wait until enough have finished.
+- **Aborting.** Esc aborts queued calls as well as running ones.
+- **Restart.** After a crash or restart, replayed subagent calls queue again, so the cap holds across `--continue`.
+- **No deadlock.** Child conversations never get the `subagent` tool, so a child can never wait for a slot its parent holds.
+
+Other ways to set the cap were considered and left out:
+
+- **settings.json.** It would need a pi settings schema change; the environment variable covers it.
+- **The model setting it through a tool.** The cap protects the user's budget, so the model must not be able to raise it.
+- **A per-call `maxParallel` parameter.** It overlaps with the global cap.
+
+The code is in [`packages/coding-agent/src/experimental/durable/subagent.ts`](packages/coding-agent/src/experimental/durable/subagent.ts) (`SubagentLimiter`, `createSubagent`). The app's own README is [`packages/coding-agent/src/experimental/durable/README.md`](packages/coding-agent/src/experimental/durable/README.md).
+
+## Quality gate
+
+The full gate is `npm run build && npm run check && ./test.sh`. It runs in the pre-push hook and in CI (`.github/workflows/check.yml`); the pre-commit hook runs `npm run check`. Upstream code stays under upstream's Biome and `tsc` configuration. The fork's own files are held to the stricter gate of [zew1me/pi-buildout](https://github.com/zew1me/pi-buildout), from the separately installed `quality/` package.
+
+| Check | Command | Covers |
+| --- | --- | --- |
+| Format and lint (repository style) | `node scripts/biome-check.mjs` | all kept sources |
+| Type check (TypeScript 7, repository config) | `tsc --noEmit` | all kept sources |
+| Strict type check (TypeScript 5.9, `noUnused*`, `noImplicitOverride`; diagnostics in the fork's files only) | `npm --prefix quality run typecheck` | all of `experimental/durable/` and its tests |
+| Type-aware lint (`strictTypeChecked`, sonarjs, security, unicorn; style defers to Biome) | `npm --prefix quality run lint:eslint` | `subagent.ts`, `main.ts`, the tests |
+| Markdown lint | `npm --prefix quality run lint:markdown` | this README and the app README |
+| Secret scan | `npm --prefix quality run secrets` | the fork's files |
+| Fork tests with coverage thresholds | `npm run test:fork` | `subagent.ts`: limiter unit tests, and the subagent tool on a real Harness with a faux model |
+| Every package's upstream tests (pi-durable also with zero document retention and in workerd) | `./test.sh` (runs `npm test`) | all nine packages |
+
+Set up once:
 
 ```bash
-npm install -g --ignore-scripts @earendil-works/pi-coding-agent
+npm ci --ignore-scripts
+npm --prefix quality ci --ignore-scripts
+npm run hydrate:model-data   # packages/ai imports generated, gitignored provider data
+npx husky                    # installs the git hooks; --ignore-scripts skips this
 ```
 
-Pi requires Node.js 22.19 or newer. The macOS, Linux, and Windows installers can install it if needed. Pi does not require dependency lifecycle scripts for a normal npm installation.
+The tests also need `fd` and `ripgrep` (the find and grep tools; on macOS `brew install fd ripgrep`). If `bun` is on PATH, codemode's Bun tests run too and need Bun 1.4 or newer.
 
-Start Pi in the directory where you want it to work:
+- **Why the build.** As upstream, some package tests load other packages' `dist/` output, so `npm run build` comes first. It builds the nine packages, with ai's offline build and coding-agent's unbundled build.
+- **No API keys.** `./test.sh` runs everything in an isolated home without credentials, so end-to-end tests skip. Run tests through it: a plain `vitest` run picks up the logins in `~/.pi` and makes paid requests.
+
+Scope notes:
+
+- `runtime.ts` and `tui.ts` are mostly upstream code. The lines this fork changed in them pass the strict lint; the files as a whole are not in the ESLint gate, because the upstream code in them fails it.
+- pi-buildout's knip (unused code and dependencies) is left out: it scans whole workspaces, and here it would report upstream code rather than the fork's.
+
+## Updating from upstream
 
 ```bash
-cd /path/to/project
-pi
+git fetch upstream
+git merge upstream/main
 ```
 
-For a built-in AI provider, run `/login` inside Pi to connect a subscription or API key. Then give Pi a task.
-
-See the [documentation](https://pi.dev/docs/latest) for full setup and usage instructions, or [visit pi.dev](https://pi.dev) for demos.
-
-## Run with Nix
-
-```bash
-nix run github:earendil-works/pi/stable
-```
-
-`stable` points at the latest release. Install it with `nix profile add github:earendil-works/pi/stable` and update with `nix profile upgrade pi`. Use a release tag such as `github:earendil-works/pi/v1.0.0` to pin a version, or `github:earendil-works/pi` for unreleased changes on `main`. Nix builds Pi from source.
-
-Supports ARM64 and x86-64 on Linux and macOS. Use `nix build .` or `nix run .` to build or run your checkout.
-
-Nix builds are offline, so the bundled model data comes from a pi.dev model catalog revision pinned in `nix/model-catalog.json`. At runtime, Pi still overlays newer catalog data from pi.dev as usual. The Nix workflow replaces the pin on `main` when it no longer matches the checkout, for example after a provider is added or gains a new model type. To refresh it by hand:
-
-```bash
-npm run update:model-catalog-pin
-```
-
-## Packages
-
-This monorepo contains the Pi CLI and its supporting libraries.
-
-| Package | Description |
-|---------|-------------|
-| **[@earendil-works/chord](packages/chord)** | Typed host runtime for hot-reloadable plugins, contracts, replicated state, and RPC over JSON links |
-| **[@earendil-works/pi-telemetry](packages/telemetry)** | Vendor-neutral telemetry contracts, reference adapter, conformance tests, and typed schemas |
-| **[@earendil-works/pi-ai](packages/ai)** | Unified multi-provider LLM API (OpenAI, Anthropic, Google, etc.) |
-| **[@earendil-works/pi-durable](packages/durable)** | Durable conversation, task, and document runtime |
-| **[@earendil-works/pi-agent-core](packages/agent)** | Agent runtime with tool calling and state management |
-| **[@earendil-works/pi-coding-agent](packages/coding-agent)** | Interactive coding agent CLI |
-| **[@earendil-works/pi-tui](packages/tui)** | Terminal UI library with differential rendering |
-
-For Slack/chat automation and workflows see [earendil-works/pi-chat](https://github.com/earendil-works/pi-chat).
-
-## Permissions & Containerization
-
-Pi does not include a built-in permission system for restricting filesystem, process, network, or credential access. By default, it runs with the permissions of the user and process that launched it.
-
-If you need stronger boundaries, containerize or sandbox Pi. See [packages/coding-agent/docs/containerization.md](packages/coding-agent/docs/containerization.md) for three patterns:
-
-- **Gondolin extension**: keep `pi` and provider auth on the host while routing built-in tools and `!` commands into a local Linux micro-VM.
-- **Plain Docker**: run the whole `pi` process in a local container for simple isolation.
-- **OpenShell**: run the whole `pi` process in a policy-controlled sandbox.
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines and [AGENTS.md](AGENTS.md) for project-specific rules (for both humans and agents).  Longer term plans for Pi can also be found in [RFCs](https://rfc.earendil.com/keyword/pi/).
-
-## Development
-
-```bash
-npm install --ignore-scripts  # Install all dependencies without running lifecycle scripts
-npm run build         # Refresh model data, then build all packages
-npm run build:offline # Rebuild using existing model data without network access
-npm run check         # Lint, format, and type check
-./test.sh            # Run tests (skips LLM-dependent tests without API keys)
-./pi-test.sh         # Run pi from sources (can be run from any directory)
-```
-
-### Using local packages outside the monorepo
-
-Build every public package into one coherent local artifact set:
-
-```bash
-npm run pack:packages -- --out .artifacts/pi-packages
-```
-
-This refreshes model data before building `pi-ai`. To avoid network access when
-model data is already hydrated, pass `--offline-model-data`.
-
-Then configure an external project to consume one package and resolve all of
-its Pi dependencies from the same artifact set. npm is the default:
-
-```bash
-node scripts/use-local-packages.mjs \
-  --manifest .artifacts/pi-packages/manifest.json \
-  --consumer ../my-project \
-  --package @earendil-works/pi-durable \
-  --package @earendil-works/pi-agent-core
-cd ../my-project
-npm install --ignore-scripts
-```
-
-For a pnpm project, point `--consumer` at the workspace root:
-
-```bash
-node scripts/use-local-packages.mjs \
-  --manifest .artifacts/pi-packages/manifest.json \
-  --consumer ../my-project \
-  --package @earendil-works/pi-agent-core \
-  --package-manager pnpm
-cd ../my-project
-pnpm install --ignore-scripts
-```
-
-Repeat `--package` for each direct dependency. The command updates the
-consumer's `package.json` with content-addressed local `file:` references. It
-writes transitive overrides to `package.json` for npm or `pnpm-workspace.yaml`
-for pnpm. Keep the artifact directory available while installing or updating
-the consumer. Re-run both commands after changing Pi source.
-
-## Building standalone binaries from release source
-
-GitHub releases include a versioned source archive covered by the release's `SHA256SUMS` file. Extract it and run the same build script used for the official standalone binaries:
-
-```bash
-VERSION="<release-version>"
-tar -xzf "pi-${VERSION}-source.tar.gz"
-cd "pi-${VERSION}"
-./scripts/build-binaries.sh --offline-model-data --platform linux-x64 --out "$PWD/out"
-```
-
-The archive includes release model data and native prebuilds. `--offline-model-data` uses that model data without refreshing provider catalogs. The script installs dependencies and builds the executable with its runtime assets; pass `--skip-install` if dependencies are already provided.
-
-## Supply-chain hardening
-
-We treat npm dependency changes as reviewed code changes.
-
-- Direct external dependencies are pinned to exact versions. Internal workspace packages remain version-ranged.
-- `.npmrc` sets `save-exact=true` and `min-release-age=2` to avoid same-day dependency releases during npm resolution.
-- `package-lock.json` is the dependency ground truth. Pre-commit blocks accidental lockfile commits unless `PI_ALLOW_LOCKFILE_CHANGE=1` is set.
-- `npm run check` verifies pinned direct deps, native TypeScript import compatibility, and the generated coding-agent install lock.
-- The pi.dev installer installs from `packages/coding-agent/install-lock/`, generated from the root lockfile, to pin transitive deps. The npm package does not pin transitive deps.
-- Local release smoke tests and npm publication use the same tarball packer; npm publishes the validated tarballs rather than repacking workspace directories.
-- Local release installs, documented npm installs, and `pi update --self` use `--ignore-scripts` where supported.
-- CI installs with `npm ci --ignore-scripts`, and a scheduled GitHub workflow runs `npm audit --omit=dev` plus `npm audit signatures --omit=dev`.
-- Install lock generation has an explicit allowlist for dependency lifecycle scripts; new lifecycle-script deps fail checks until reviewed.
-
-## Share your OSS coding agent sessions
-
-If you use Pi or other coding agents for open source work, please share your sessions.
-
-Public OSS session data helps improve coding agents with real-world tasks, tool use, failures, and fixes instead of toy benchmarks.
-
-For the full explanation, see [this post on X](https://x.com/badlogicgames/status/2037811643774652911).
-
-To publish sessions, use [`badlogic/pi-share-hf`](https://github.com/badlogic/pi-share-hf). Read its README.md for setup instructions. All you need is a Hugging Face account, the Hugging Face CLI, and `pi-share-hf`.
-
-You can also watch [this video](https://x.com/badlogicgames/status/2041151967695634619), where I show how I publish my `pi-mono` sessions.
-
-I regularly publish my own `pi-mono` work sessions here:
-
-- [badlogicgames/pi-mono on Hugging Face](https://huggingface.co/datasets/badlogicgames/pi-mono)
+Upstream changes to files this fork deleted show up as modify/delete conflicts; resolve them by keeping the deletion (`git rm`). After the merge, run `npm run build && npm run check && ./test.sh`. API changes in `pi-durable` surface as type errors in `packages/coding-agent/src/experimental/durable/`.
 
 ## License
 
-MIT
-
-<p align="center">
-  <a href="https://pi.dev">pi.dev</a> domain graciously donated by
-  <br /><br />
-  <a href="https://exe.dev"><img src="packages/coding-agent/docs/images/exy.png" alt="Exy mascot" width="48" /><br />exe.dev</a>
-</p>
+MIT, as upstream. See [LICENSE](LICENSE).
