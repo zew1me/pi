@@ -1,0 +1,4 @@
+#!/bin/sh
+# The complete read-only gate, as CI runs it: build (package tests load dist output), checks, and every package's
+# tests in an isolated home without API keys. Rejects the push instead of fixing files.
+npm run build && npm run check && ./test.sh
