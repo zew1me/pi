@@ -11,6 +11,7 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 const owned = [
+	"packages/ai/test/opencode-cache-retention.test.ts",
 	"packages/coding-agent/src/experimental/durable/subagent.ts",
 	"packages/coding-agent/src/experimental/durable/main.ts",
 	"packages/coding-agent/test/durable-*.test.ts",
