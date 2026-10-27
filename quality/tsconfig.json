@@ -8,5 +8,5 @@
 		"noFallthroughCasesInSwitch": true,
 		"typeRoots": ["./node_modules/@types"]
 	},
-	"include": ["../packages/coding-agent/src/experimental/durable/**/*.ts", "../packages/coding-agent/test/durable-*.ts"]
+	"include": ["../packages/ai/test/opencode-cache-retention.test.ts", "../packages/coding-agent/src/experimental/durable/**/*.ts", "../packages/coding-agent/test/durable-*.ts"]
 }
