@@ -36,12 +36,11 @@ npm install --ignore-scripts
 npm run hydrate:model-data
 ```
 
-- `--ignore-scripts` skips lifecycle scripts (npm scripts that run automatically during install, such as `prepare`). See Dependency and Install Security.
-- `hydrate:model-data` fetches public model catalogs and writes `packages/ai/src/providers/data/` (gitignored). Without it, `tsc` reports errors in `packages/ai/src/providers/*.models.ts`. It needs network access.
-- Git hooks are not installed by this flow, because `prepare` installs husky. The pre-commit hook blocks lockfile commits and runs `npm run check`. Run `npm run prepare` only if you want it active; it is a lifecycle script.
-- `npm install` may rewrite `package-lock.json` even with no dependency changes. npm 10.9.4, for example, removed `libc` entries from optional native packages. If `git diff package-lock.json` shows only that kind of change, restore it with `git checkout -- package-lock.json`. Do not restore changes another session made.
+- Without running `hydrate:model-data`, `tsc` reports errors in `packages/ai/src/providers/*.models.ts`. It needs network access.
+- Git hooks are not installed by this flow. `prepare` installs husky. The pre-commit hook blocks lockfile commits and runs `npm run check`. Run `npm run prepare` only if you want it active.
+- `npm install` may rewrite `package-lock.json`. If `git diff package-lock.json` shows only inert changes, restore it with `git checkout -- package-lock.json`. Do not restore changes another session made.
 - Verify with `node_modules/.bin/tsc --noEmit`. It should exit 0 with no output. It is the typecheck step of `npm run check`, without the write steps.
-- Cloud sessions: add the same commands to the environment setup script, after a `cd` into the repo.
+- Cloud sessions: run the same commands after the environment setup script, after a `cd` into the repo.
 
 ## Commands
 
