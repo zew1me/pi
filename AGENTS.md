@@ -1,6 +1,6 @@
 # Development Rules
 
-This fork restores the experimental durable app (`packages/coding-agent/src/experimental/durable/`) and retains potential durable integrations, evaluation infrastructure, and documented examples, not just the app's current imports. See `README.md` for scope and the quality gate.
+This is a trimmed fork that keeps the experimental durable app (`packages/coding-agent/src/experimental/durable/`) and retains potential durable integrations, evaluation infrastructure, and documented examples, not just the app's current imports. See `README.md` for scope and the quality gate.
 
 ## Conversational Style
 
