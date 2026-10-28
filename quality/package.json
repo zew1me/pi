@@ -1,0 +1,29 @@
+{
+	"name": "pi-fork-quality",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "Quality gate for this fork's own changes: the durable app and its subagent limiter",
+	"scripts": {
+		"lint:eslint": "cd .. && eslint -c quality/eslint.config.mjs --max-warnings 0 packages/ai/test/opencode-cache-retention.test.ts packages/coding-agent/src/experimental/durable/subagent.ts packages/coding-agent/src/experimental/durable/main.ts packages/coding-agent/test/durable-subagent-limiter.test.ts",
+		"lint:markdown": "markdownlint-cli2 --config .markdownlint-cli2.jsonc ../README.md ../packages/coding-agent/src/experimental/durable/README.md",
+		"typecheck": "node typecheck.mjs",
+		"secrets": "secretlint --secretlintrc .secretlintrc.json \"../packages/ai/test/opencode-cache-retention.test.ts\" \"../README.md\" \"../packages/coding-agent/src/experimental/durable/**/*\" \"../packages/coding-agent/test/durable-*.ts\" \"../quality/*.{json,jsonc,mjs}\" \"../.github/**/*\"",
+		"check": "npm run lint:eslint && npm run lint:markdown && npm run typecheck && npm run secrets"
+	},
+	"devDependencies": {
+		"@eslint/js": "9.39.5",
+		"@secretlint/secretlint-rule-preset-recommend": "13.0.2",
+		"@types/node": "22.19.19",
+		"eslint": "9.39.5",
+		"eslint-plugin-import-x": "4.17.1",
+		"eslint-plugin-security": "4.0.1",
+		"eslint-plugin-sonarjs": "4.2.0",
+		"eslint-plugin-unicorn": "65.0.1",
+		"globals": "16.5.0",
+		"markdownlint-cli2": "0.23.0",
+		"secretlint": "13.0.2",
+		"typescript": "5.9.3",
+		"typescript-eslint": "8.64.0"
+	}
+}
