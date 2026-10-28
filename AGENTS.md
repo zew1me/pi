@@ -1,6 +1,6 @@
 # Development Rules
 
-This is a trimmed fork that keeps only the experimental durable app (`packages/coding-agent/src/experimental/durable/`); see `README.md` for why and for the quality gate.
+This is a trimmed fork that keeps the experimental durable app (`packages/coding-agent/src/experimental/durable/`) and retains potential durable integrations, evaluation infrastructure, and documented examples, not just the app's current imports. See `README.md` for scope and the quality gate.
 
 ## Conversational Style
 
@@ -31,14 +31,15 @@ This is a trimmed fork that keeps only the experimental durable app (`packages/c
 
 ## Commands
 
-- After code changes (not docs): `npm run check` (full output, no tail). Fix all errors, warnings, and infos before committing. Does not run tests. It needs `npm --prefix quality ci --ignore-scripts` and `npm run hydrate:model-data` once.
+- After code changes (not docs): `npm run check` (full output, no tail). Fix all errors, warnings, and infos before committing. Does not run tests. It needs `npm --prefix quality ci --ignore-scripts`, `npm run hydrate:model-data`, and the Rust toolchain pinned in `packages/env/daemon/rust-toolchain.toml`. `npm run build` also builds the env daemon required by its tests.
 - Never run the full vitest suite directly: it includes e2e tests that activate when endpoint/auth env vars or `~/.pi` logins are present. For all non-e2e tests, run `./test.sh` from the repo root (after `npm run build`; some package tests load other packages' `dist/`). Otherwise run specific tests from the package root:
   - Vitest: `node "$(git rev-parse --show-toplevel)/node_modules/vitest/dist/cli.js" --run test/specific.test.ts`
   - `packages/tui` (`node:test`): `node --test test/specific.test.ts`
 - `npm run test:fork` runs the fork's own tests with coverage thresholds.
 - For `packages/coding-agent/test/suite/`, use `test/suite/harness.ts` + the faux provider. No real provider APIs, keys, or paid tokens.
 - If you create or modify a test file, run it and iterate on test or implementation until it passes.
-- New files of the fork go into the `quality/` gate: add them to `owned` in `quality/eslint.config.mjs` and to `include` in `quality/tsconfig.json`.
+- New files authored by the fork go into the `quality/` gate: add them to `owned` in `quality/eslint.config.mjs` and to `include` in `quality/tsconfig.json`. Restored upstream files stay under the repository's upstream checks.
+- `packages/evals`' normal `test` command runs unit tests only. Never add real-model eval commands to CI or hooks; they use credentials and may incur costs.
 - When regressions tests for fixing a github issue, add a comment with the github issue number next to the test.
 - For ad-hoc scripts, `write` them to a temp file (e.g. `/tmp`), run, edit if needed, remove when done. Don't embed multi-line scripts in `bash` commands.
 - Never commit unless the user asks.
