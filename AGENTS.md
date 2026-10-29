@@ -35,9 +35,11 @@ Run from the repo root after a fresh clone, or when `node_modules` is missing:
 
 ```bash
 npm install --ignore-scripts
+npm --prefix quality ci --ignore-scripts
 npm run hydrate:model-data
 ```
 
+- `npm --prefix quality ci` installs the separate `quality/` package that `npm run check` uses for the fork's stricter gate (see `README.md`).
 - Without running `hydrate:model-data`, `tsc` reports errors in `packages/ai/src/providers/*.models.ts`. It needs network access.
 - Git hooks are not installed by this flow. `prepare` installs husky. The pre-commit hook blocks lockfile commits and runs `npm run check`. Run `npm run prepare` only if you want it active.
 - `npm install` may rewrite `package-lock.json`. If `git diff package-lock.json` shows only inert changes, restore it with `git checkout -- package-lock.json`. Do not restore changes another session made.
