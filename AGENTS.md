@@ -29,6 +29,23 @@ This is a trimmed fork that keeps only the experimental durable app (`packages/c
 - Never hardcode key checks (e.g. `matchesKey(keyData, "ctrl+x")`). Add defaults to `DEFAULT_EDITOR_KEYBINDINGS` or `DEFAULT_APP_KEYBINDINGS` so they stay configurable.
 - Never modify `packages/ai/src/models.generated.ts` directly; update `packages/ai/scripts/generate-models.ts` instead, then regenerate. Including the resulting `models.generated.ts` diff is always OK, even if regeneration includes unrelated upstream model metadata changes. The generated model data in `packages/ai/src/providers/data/` is gitignored: never stage it, and don't look for it in git history.
 
+## Initial Setup
+
+Run from the repo root after a fresh clone, or when `node_modules` is missing:
+
+```bash
+npm install --ignore-scripts
+npm --prefix quality ci --ignore-scripts
+npm run hydrate:model-data
+```
+
+- `npm --prefix quality ci` installs the separate `quality/` package that `npm run check` uses for the fork's stricter gate (see `README.md`).
+- Without running `hydrate:model-data`, `tsc` reports errors in `packages/ai/src/providers/*.models.ts`. It needs network access.
+- Git hooks are not installed by this flow. `prepare` installs husky. The pre-commit hook blocks lockfile commits and runs `npm run check`. Run `npm run prepare` only if you want it active.
+- `npm install` may rewrite `package-lock.json`. If `git diff package-lock.json` shows only inert changes, restore it with `git checkout -- package-lock.json`. Do not restore changes another session made.
+- Verify with `node_modules/.bin/tsc --noEmit`. It should exit 0 with no output. It is the typecheck step of `npm run check`, without the write steps.
+- Cloud sessions: run the same commands after the environment setup script, after a `cd` into the repo.
+
 ## Commands
 
 - After code changes (not docs): `npm run check` (full output, no tail). Fix all errors, warnings, and infos before committing. Does not run tests. It needs `npm --prefix quality ci --ignore-scripts` and `npm run hydrate:model-data` once.
