@@ -4,15 +4,27 @@
 	"type": "module",
 	"workspaces": [
 		"packages/*",
-		"packages/coding-agent/examples/extensions/with-deps"
+		"packages/coding-agent/examples/extensions/with-deps",
+		"packages/coding-agent/examples/extensions/custom-provider-anthropic",
+		"packages/coding-agent/examples/extensions/custom-provider-gitlab-duo",
+		"packages/coding-agent/examples/extensions/sandbox",
+		"packages/coding-agent/examples/extensions/gondolin"
 	],
 	"scripts": {
 		"start": "node --import ./packages/coding-agent/src/experimental/source-resolver.ts packages/coding-agent/src/experimental/durable/main.ts",
-		"build": "npm run build -w @earendil-works/pi-telemetry && npm run build -w @earendil-works/chord && npm run build -w @earendil-works/pi-tui && npm run build -w @earendil-works/pi-codemode && npm run build -w @earendil-works/pi-mcp && npm run build:offline -w @earendil-works/pi-ai && npm run build -w @earendil-works/pi-durable && npm run build -w @earendil-works/pi-agent-core && npm run build:unbundled -w @earendil-works/pi-coding-agent",
+		"build": "npm run build:offline && npm run build:daemon -w @earendil-works/pi-env",
+		"build:offline": "npm run build -w @earendil-works/pi-telemetry && npm run build -w @earendil-works/chord && npm run build -w @earendil-works/pi-tui && npm run build -w @earendil-works/pi-codemode && npm run build -w @earendil-works/pi-mcp && npm run build:offline -w @earendil-works/pi-ai && npm run build -w @earendil-works/pi-durable && npm run build -w @earendil-works/pi-env && npm run build -w @earendil-works/pi-agent-core && npm run build -w @earendil-works/pi-coding-agent",
+		"generate:models": "npm --prefix packages/ai run generate-models",
+		"eval": "npm run eval --workspace=@earendil-works/pi-evals --",
 		"hydrate:model-data": "npm --prefix packages/ai run hydrate-model-data",
-		"check": "node scripts/biome-check.mjs && tsc --noEmit && npm --prefix quality run check",
+		"check": "node scripts/biome-check.mjs && tsc --noEmit && tsc --noEmit -p packages/coding-agent/tsconfig.examples.json && tsc --noEmit -p packages/evals/tsconfig.json && npm run check:entry-graphs && npm run check:browser-smoke && npm run check:daemon && npm --prefix quality run check",
+		"check:entry-graphs": "node scripts/check-entry-graphs.mjs",
+		"check:browser-smoke": "node scripts/check-browser-smoke.mjs",
+		"check:daemon": "cd packages/env/daemon && cargo fmt --check && cargo clippy --locked --all-targets -- -D warnings",
+		"test:daemon": "cd packages/env/daemon && cargo test --locked",
 		"format": "node scripts/biome-check.mjs --write",
-		"test": "npm run test:fork && npm run test --workspaces --if-present",
+		"test": "npm run test:scripts && npm run test:fork && npm run test --workspaces --if-present",
+		"test:scripts": "node --test scripts/*.test.mjs",
 		"test:fork": "cd packages/coding-agent && vitest --run --coverage test/durable-subagent-limiter.test.ts",
 		"prepare": "husky"
 	},
