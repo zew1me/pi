@@ -1,4 +1,18 @@
 #!/bin/sh
 # The complete read-only gate, as CI runs it: build (package tests load dist output), checks, and every package's
 # tests in an isolated home without API keys. Rejects the push instead of fixing files.
-npm run build && npm run check && ./test.sh
+npm run build && npm run check || exit $?
+
+# Keep a private, unique log for each push, including successful runs.
+log=$(mktemp "${TMPDIR:-/tmp}/pi-pre-push.XXXXXX") || exit 1
+printf 'Running tests (full log: %s)\n' "$log"
+if ./test.sh >"$log" 2>&1; then
+	printf 'Tests passed.\n'
+	# Include nearby lines so warning messages and their stack traces remain useful.
+	awk '/[Ww][Aa][Rr][Nn]|[Ee][Rr][Rr][Oo][Rr]/ { remaining = 8 } remaining > 0 { print; remaining-- }' "$log"
+else
+	status=$?
+	printf 'Tests failed (exit %s); full output follows and is saved in %s\n' "$status" "$log" >&2
+	cat "$log" >&2
+	exit "$status"
+fi
