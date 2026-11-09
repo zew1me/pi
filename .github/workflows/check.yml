@@ -24,8 +24,11 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev fd-find ripgrep
+          sudo apt-get install -y libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev fd-find ripgrep openssh-server
           sudo ln -s "$(which fdfind)" /usr/local/bin/fd
+          sudo mkdir -p /run/sshd
+      - name: Install the pinned daemon toolchain
+        run: rustup toolchain install 1.96.0 --profile minimal --component rustfmt --component clippy
       - name: Install dependencies (no lifecycle scripts)
         run: |
           npm ci --ignore-scripts
@@ -39,3 +42,8 @@ jobs:
         run: npm run check
       - name: Test (isolated home, no API keys)
         run: ./test.sh
+      # Build only: eval runs use real models and must stay opt-in.
+      - name: Build eval images (no model requests)
+        run: |
+          docker build --target without_docs -t pi-evals:without-docs -f packages/evals/docker/Dockerfile .
+          docker build --target with_docs -t pi-evals:with-docs -f packages/evals/docker/Dockerfile .

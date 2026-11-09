@@ -1,6 +1,6 @@
 # pi durable fork
 
-A trimmed fork of [earendil-works/pi](https://github.com/earendil-works/pi). It keeps one thing working: the experimental durable coding agent. It adds a cap on how many subagents run at once.
+A focused fork of [earendil-works/pi](https://github.com/earendil-works/pi). It restores the experimental durable coding agent, retains the libraries and reference material useful for building on it, and adds a cap on concurrent subagents.
 
 ```bash
 npm ci --ignore-scripts
@@ -19,12 +19,14 @@ node --import ./packages/coding-agent/src/experimental/source-resolver.ts packag
 
 **Subagent fan-out had no limit.** The app's `subagent` tool runs each delegated task in its own child conversation. Tools in one model answer run in parallel. So an answer with 12 `subagent` calls started 12 conversations at once, each streaming its own model requests. That causes rate limits, cost spikes, and a task panel nobody can follow. This fork caps the number of subagents running at once; the rest wait in arrival order.
 
-**Everything outside the app's dependency tree is removed.** The fork keeps the nine packages the launch command imports: `ai`, `agent`, `chord`, `codemode`, `coding-agent`, `durable`, `mcp`, `telemetry`, `tui`.
+**Keep potential durable integrations, not just today's imports.** All eleven upstream packages are retained, with their source and unit tests:
 
-- Each keeps its source and its full upstream test suite. The eight library packages match upstream file for file.
-- coding-agent keeps its docs (the system prompt points the model at them) and the example extensions and scripts its tests load.
+- `ai`, `agent`, `chord`, `codemode`, `coding-agent`, `durable`, `mcp`, `telemetry`, and `tui` support the local app.
+- `env` implements Durable's `ExecutionEnv` over a Rust daemon and SSH. It is available for remote agents; the app still selects `NodeExecutionEnv` locally.
+- `evals` preserves reusable evaluation infrastructure. Its current adapter targets classic Pi, not Durable; restoring it does not add durable behavioral coverage. Real-model evals remain opt-in and may incur costs.
+- coding-agent's complete docs and examples remain available because the durable system prompt directs the model to them. Shared model, auth, settings, and TUI examples are useful references; classic extensions, RPC, and SDK sessions are not drop-in durable integrations.
 
-The `env` and `evals` packages, coding-agent's other examples, release and publish tooling, Nix files, and upstream CI are gone.
+Classic-only installation locks and the old JSONL session migration remain removed. Release/publish automation and Nix files remain out of scope. Consumer-install helpers, bundled builds, and browser/entry-graph checks are retained where the restored tooling needs them.
 
 ## Subagent concurrency cap
 
@@ -60,13 +62,16 @@ The full gate is `npm run build && npm run check && ./test.sh`. It runs in the p
 | Check | Command | Covers |
 | --- | --- | --- |
 | Format and lint (repository style) | `node scripts/biome-check.mjs` | all kept sources |
-| Type check (TypeScript 7, repository config) | `tsc --noEmit` | all kept sources |
+| Type check (TypeScript 7, repository config) | `tsc --noEmit` and evals' config | sources, tests, examples, eval definitions and Docker entrypoint |
 | Strict type check (TypeScript 5.9, `noUnused*`, `noImplicitOverride`; diagnostics in the fork's files only) | `npm --prefix quality run typecheck` | all of `experimental/durable/` and its tests |
 | Type-aware lint (`strictTypeChecked`, sonarjs, security, unicorn; style defers to Biome) | `npm --prefix quality run lint:eslint` | `subagent.ts`, `main.ts`, the tests |
 | Markdown lint | `npm --prefix quality run lint:markdown` | this README and the app README |
 | Secret scan | `npm --prefix quality run secrets` | the fork's files |
 | Fork tests with coverage thresholds | `npm run test:fork` | `subagent.ts`: limiter unit tests, and the subagent tool on a real Harness with a faux model |
-| Every package's upstream tests (pi-durable also with zero document retention and in workerd) | `./test.sh` (runs `npm test`) | all nine packages |
+| Every package's upstream tests (pi-durable also with zero document retention and in workerd) | `./test.sh` | all eleven packages, restored script tests, Rust daemon tests; no real-model evals |
+| Rust format and lint | `npm run check:daemon` | env daemon, including its unit tests |
+| Browser compatibility and dependency budgets | `npm run check:browser-smoke` and `npm run check:entry-graphs` | retained library entrypoints, including Durable |
+| Eval image builds (CI only) | Docker builds both documentation variants | consumer installation and bundled runtime; no model requests |
 
 Set up once:
 
@@ -75,12 +80,14 @@ npm ci --ignore-scripts
 npm --prefix quality ci --ignore-scripts
 npm run hydrate:model-data   # packages/ai imports generated, gitignored provider data
 npx husky                    # installs the git hooks; --ignore-scripts skips this
+# With rustup installed; daemon/rust-toolchain.toml pins the version:
+rustup toolchain install 1.96.0 --component rustfmt --component clippy
 ```
 
-The tests also need `fd` and `ripgrep` (the find and grep tools; on macOS `brew install fd ripgrep`). If `bun` is on PATH, codemode's Bun tests run too and need Bun 1.4 or newer.
+The tests also need `fd` and `ripgrep` (the find and grep tools; on macOS `brew install fd ripgrep`). SSH bootstrap tests need OpenSSH client/server; CI installs them and creates `/run/sshd`. Docker is needed for eval image builds, not unit tests. If `bun` is on PATH, codemode's Bun tests run too and need Bun 1.4 or newer.
 
-- **Why the build.** As upstream, some package tests load other packages' `dist/` output, so `npm run build` comes first. It builds the nine packages, with ai's offline build and coding-agent's unbundled build.
-- **No API keys.** `./test.sh` runs everything in an isolated home without credentials, so end-to-end tests skip. Run tests through it: a plain `vitest` run picks up the logins in `~/.pi` and makes paid requests.
+- **Why the build.** Some package tests load other packages' `dist/` output, and env tests need the daemon. `npm run build` builds the ten runtime packages, including coding-agent's bundle, then the Rust daemon. `build:offline` builds only the TypeScript packages from hydrated model data, so eval images do not need Rust.
+- **No API keys.** `./test.sh` runs Rust tests using Cargo's cache, then JavaScript tests in an isolated home without credentials, so end-to-end tests skip. Run tests through it: a plain `vitest` run picks up the logins in `~/.pi` and makes paid requests. Evals' normal `test` command selects unit tests only; `npm run eval` is separate and must not be added to the gate.
 
 Scope notes:
 
@@ -94,7 +101,7 @@ git fetch upstream
 git merge upstream/main
 ```
 
-Upstream changes to files this fork deleted show up as modify/delete conflicts; resolve them by keeping the deletion (`git rm`). After the merge, run `npm run build && npm run check && ./test.sh`. API changes in `pi-durable` surface as type errors in `packages/coding-agent/src/experimental/durable/`.
+Upstream changes to deleted files show up as modify/delete conflicts. Review their purpose before resolving them: preserve code and references useful for durable agents, even if the current app does not import them. After the merge, run `npm run build && npm run check && ./test.sh`. API changes in `pi-durable` surface as type errors in the app and remote environment implementations.
 
 ## License
 
