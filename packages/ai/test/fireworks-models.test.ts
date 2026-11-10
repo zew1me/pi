@@ -160,7 +160,8 @@ describe("Fireworks models", () => {
 	});
 
 	it("keeps toggle-only Messages models without a verified fallback on budget-based thinking", async () => {
-		const model = getModel("fireworks", "accounts/fireworks/models/nemotron-3-ultra-nvfp4");
+		// Use a fixture: toggle-only models may disappear from the live catalog.
+		const model = createFireworksModel();
 		expect(model.compat?.forceAdaptiveThinking).toBeUndefined();
 		let payload: Record<string, unknown> | undefined;
 		await streamSimple(
@@ -187,7 +188,7 @@ describe("Fireworks models", () => {
 	});
 
 	it("sets Fireworks-specific compat for session affinity and unsupported tool fields", () => {
-		const model = getModel("fireworks", "accounts/fireworks/models/nemotron-3-ultra-nvfp4");
+		const model = getModel("fireworks", "accounts/fireworks/models/deepseek-v4p1-flash");
 
 		expect(model.compat).toBeDefined();
 		expect(model.compat?.sendSessionAffinityHeaders).toBe(true);
